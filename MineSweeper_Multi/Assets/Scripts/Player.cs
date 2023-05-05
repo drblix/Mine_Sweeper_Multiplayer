@@ -1,50 +1,40 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using Mirror;
 
-public class Player : MonoBehaviour
+public class Player : NetworkBehaviour
 {
-    [SerializeField] private AudioClip[] _soundClips;
-    [SerializeField] private AudioSource[] _audioSources;
+    [SerializeField] private GameObject _tile;
+    [SerializeField] private Transform _board;
 
-    public enum SoundClips
-    {
-        MouseDown,
-        MouseUp,
-        Select,
-        Explosion,
-        Tada
-    }
+    private float _xPos = 0f;
 
-    public enum Sources
+    private void Start()
     {
-        Mouse,
-        Board
+        _board = GameObject.FindGameObjectWithTag("Board").transform;
     }
 
     private void Update()
     {
-        ClickSound();
+        if (isLocalPlayer)
+        {
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                SpawnTile();
+            }
+        }
     }
 
-    /// <summary>
-    /// Handles clicking sounds from user's mouse
-    /// </summary>
-    private void ClickSound()
+    [Command]
+    private void SpawnTile()
     {
-        if ((Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)))
-            PlaySound(SoundClips.MouseDown, Sources.Mouse);
-        else if (Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1))
-            PlaySound(SoundClips.MouseUp, Sources.Mouse);
-    }
+        GameObject newTile = Instantiate(_tile);
+        newTile.transform.SetParent(_board, false);
+        newTile.transform.localPosition = new Vector2(_xPos, 0f);
 
-    /// <summary>
-    /// Plays a sound
-    /// </summary>
-    /// <param name="clip">Clip to play</param>
-    /// <param name="src">Source to play clip from</param>
-    public void PlaySound(SoundClips clip, Sources src)
-    {
-        AudioSource source = _audioSources[(int)src];
-        source.clip = _soundClips[(int)clip];
-        source.Play();
+        NetworkServer.Spawn(newTile);
+
+        _xPos += 45f;
     }
 }
