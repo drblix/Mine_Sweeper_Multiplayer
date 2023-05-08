@@ -1,40 +1,96 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Mirror;
 
 public class Player : NetworkBehaviour
 {
     [SerializeField] private GameObject _tile;
-    [SerializeField] private Transform _board;
 
-    private float _xPos = 0f;
+    private BoardManager _board;
+
+    [SerializeField] private byte _playerNum = 0;
+
+    private Color _playerColor;
+    private Tile _currentTile;
 
     private void Start()
     {
-        _board = GameObject.FindGameObjectWithTag("Board").transform;
+        _board = FindObjectOfType<BoardManager>();
+
+        _playerColor = _playerNum == 1 ? Color.red : Color.blue;
     }
 
     private void Update()
     {
         if (isLocalPlayer)
         {
-            if (Input.GetKeyDown(KeyCode.Space))
+            TileInteraction();
+            PlayerInput();
+
+        }
+        // Debug.Log(NetworkManager.singleton.networkAddress);
+
+    }
+
+    private void PlayerInput()
+    {
+        if (!IsTurn() || _board.GetGameStatus()) return;
+
+        if (Input.GetMouseButtonDown(0))
+        {
+            if (_currentTile && !_currentTile.GetRevealed())
             {
-                SpawnTile();
+                _currentTile.CmdReveal();
+
+                if (_board.GetMineStatus())
+                    _board.CmdPlayerPlayed();
+            }
+        }
+        else if (Input.GetMouseButtonDown(1))
+        {
+            if (_currentTile)
+            {
+                _currentTile.CmdFlag();
             }
         }
     }
 
-    [Command]
-    private void SpawnTile()
+    private void TileInteraction()
     {
-        GameObject newTile = Instantiate(_tile);
-        newTile.transform.SetParent(_board, false);
-        newTile.transform.localPosition = new Vector2(_xPos, 0f);
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        if (Physics.Raycast(ray, out RaycastHit info, 50f) && IsTurn() && !_board.GetGameStatus())
+        {
+            if (info.collider.TryGetComponent(out Tile tile))
+            {
+                if (_currentTile != tile || !_tile)
+                {
+                    // GetComponent calls are assigning color on client-side to prevent visual latency over server calls
 
-        NetworkServer.Spawn(newTile);
+                    if (_currentTile)
+                    {
+                        _currentTile.GetComponent<SpriteRenderer>().color = Color.white;
+                        _currentTile.CmdSetColor(Color.white);
+                    }
 
-        _xPos += 45f;
+                    _currentTile = tile;
+                    tile.GetComponent<SpriteRenderer>().color = _playerColor;
+                    tile.CmdSetColor(_playerColor);
+                }
+            }
+        }
+        else if (_currentTile)
+        {
+            _currentTile.GetComponent<SpriteRenderer>().color = Color.white;
+            _currentTile.CmdSetColor(Color.white);
+            _currentTile = null;
+        }
+    }
+
+    private bool IsTurn() => _board.GetPlayerTurn() == _playerNum;
+
+    [TargetRpc]
+    public void SetPlayerNum(NetworkConnectionToClient _, byte num)
+    {
+        _playerNum = num;
+        _playerColor = _playerNum == 1 ? Color.red : Color.blue;
     }
 }
