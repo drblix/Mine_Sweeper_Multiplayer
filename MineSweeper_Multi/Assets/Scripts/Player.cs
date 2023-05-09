@@ -1,5 +1,6 @@
 using UnityEngine;
 using Mirror;
+using TMPro;
 
 public class Player : NetworkBehaviour
 {
@@ -7,16 +8,21 @@ public class Player : NetworkBehaviour
 
     private BoardManager _board;
 
-    [SerializeField] private byte _playerNum = 0;
+    [SerializeField] [SyncVar] private byte _playerNum = 0;
 
-    private Color _playerColor;
+    [SyncVar] private Color _playerColor;
+
     private Tile _currentTile;
+
+    private TextMeshProUGUI _turnPrompt;
+    private AudioSource _turnSource;
+    private bool _turnChanged = false;
 
     private void Start()
     {
         _board = FindObjectOfType<BoardManager>();
-
-        _playerColor = _playerNum == 1 ? Color.red : Color.blue;
+        _turnPrompt = GameObject.Find("TurnPrompt").GetComponent<TextMeshProUGUI>();
+        _turnSource = _turnPrompt.GetComponent<AudioSource>();
     }
 
     private void Update()
@@ -25,10 +31,8 @@ public class Player : NetworkBehaviour
         {
             TileInteraction();
             PlayerInput();
-
+            TurnPromptUpdate();
         }
-        // Debug.Log(NetworkManager.singleton.networkAddress);
-
     }
 
     private void PlayerInput()
@@ -85,12 +89,52 @@ public class Player : NetworkBehaviour
         }
     }
 
-    private bool IsTurn() => _board.GetPlayerTurn() == _playerNum;
+    private void TurnPromptUpdate()
+    {
+        _turnPrompt.color = _playerColor;
 
-    [TargetRpc]
-    public void SetPlayerNum(NetworkConnectionToClient _, byte num)
+        if (IsTurn())
+        {
+            if (_turnChanged)
+                _turnSource.Play();
+
+            _turnPrompt.SetText("It's your turn!");
+            _turnChanged = false;
+        }
+        else
+        {
+            _turnChanged = true;
+            _turnPrompt.SetText($"It's Player {_board.GetPlayerTurn()}'s turn!");
+        }
+    }
+
+    private bool IsTurn() => _board.GetPlayerTurn() == _playerNum;
+    public byte GetPlayerNum() => _playerNum;
+
+
+    [Server]
+    public void SetPlayerNum(byte num)
     {
         _playerNum = num;
-        _playerColor = _playerNum == 1 ? Color.red : Color.blue;
+
+        switch (_playerNum)
+        {
+            case 1:
+                _playerColor = Color.red;
+                break;
+            case 2:
+                _playerColor = Color.blue;
+                break;
+            case 3:
+                _playerColor = Color.green;
+                break;
+            case 4:
+                _playerColor = Color.yellow;
+                break;
+            default:
+                _playerColor = Color.white;
+                break;
+        }
     }
+
 }

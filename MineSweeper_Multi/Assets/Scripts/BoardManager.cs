@@ -6,6 +6,8 @@ using System;
 
 public class BoardManager : NetworkBehaviour
 {
+    private NetworkManagerSweeper _networkSweeper;
+
     [SerializeField] private GameObject _tile;
     [SerializeField] private TMP_InputField _heightInput, _widthInput, _mineInput;
     [SerializeField] private Image _emoticon;
@@ -15,7 +17,8 @@ public class BoardManager : NetworkBehaviour
 
     [SyncVar] private byte _playerTurn = 1;
 
-    [SyncVar] private byte _width, _height, _minesAmount, _revealedSafeTiles, _safeTiles;
+    [SyncVar] private byte _width, _height;
+    [SyncVar] private ushort _revealedSafeTiles, _safeTiles, _minesAmount;
 
     [SyncVar] private bool _gameOver = false, _minesGenerated = false;
 
@@ -48,7 +51,9 @@ public class BoardManager : NetworkBehaviour
     public override void OnStartServer()
     {
         base.OnStartServer();
+        _networkSweeper = FindObjectOfType<NetworkManagerSweeper>();
         _playerTurn = 1;
+        RpcSetEmoticon(TileSprites.Happy);
     }
 
     // GetLength conversions:
@@ -56,7 +61,7 @@ public class BoardManager : NetworkBehaviour
     // _height = GetLength(1)
 
     [Server]
-    private void CreateBoard(byte height, byte width, byte mines)
+    private void CreateBoard(byte height, byte width, ushort mines)
     {
         ClearBoard();
 
@@ -65,8 +70,8 @@ public class BoardManager : NetworkBehaviour
         _minesAmount = mines;
         _width = width;
         _height = height;
-        _safeTiles = (byte)(_width * _height - _minesAmount);
-        
+        _safeTiles = (ushort)(_width * _height - _minesAmount);
+
         _gameOver = false;
         _generationSeed = (int)DateTime.Now.Ticks;
         _revealedSafeTiles = 0;
@@ -92,6 +97,7 @@ public class BoardManager : NetworkBehaviour
         }
 
         _syncBoard.Clear();
+        // Tile[] tempList = To1DSyncList(_board);
         SyncList<Tile> tempList = To1DSyncList(_board);
         for (int i = 0; i < tempList.Count; i++)
             _syncBoard.Add(tempList[i]);
@@ -105,7 +111,8 @@ public class BoardManager : NetworkBehaviour
             {
                 if (tile)
                 {
-                    Destroy(tile.gameObject);
+                    NetworkServer.Destroy(tile.gameObject);
+                    // Destroy(tile.gameObject);
                     //if (isServer)
                     //    NetworkServer.Destroy(tile.gameObject);
                 }
@@ -136,7 +143,7 @@ public class BoardManager : NetworkBehaviour
                     || _mineInput.text == string.Empty) return;
 
                 // create board using custom inputs of height, width, and mine count
-                if (byte.TryParse(_heightInput.text, out byte height) && byte.TryParse(_widthInput.text, out byte width) && byte.TryParse(_mineInput.text, out byte mines))
+                if (byte.TryParse(_heightInput.text, out byte height) && byte.TryParse(_widthInput.text, out byte width) && ushort.TryParse(_mineInput.text, out ushort mines))
                     CreateBoard(height, width, mines);
                 else
                     CreateBoard(9, 9, 10);
@@ -240,7 +247,6 @@ public class BoardManager : NetworkBehaviour
                     if (count == _minesAmount)
                         break;
 
-                    //Tile tile = _board[x, y];
                     Tile tile = _syncBoard[x * _height + y];
 
                     if (UnityEngine.Random.Range(0, 13) == 0 && !tile.GetMine() && tile != exception)
@@ -284,15 +290,19 @@ public class BoardManager : NetworkBehaviour
         _gameSource.Play();
     }
 
+   
     private SyncList<Tile> To1DSyncList(Tile[,] input)
     {
+        //Tile[] result = new Tile[input.GetLength(0) * input.GetLength(1)];
         SyncList<Tile> result = new();
 
+        // int index = 0;
         for (int i = 0; i < input.GetLength(0); i++)
         {
             for (int z = 0; z < input.GetLength(1); z++)
             {
                 result.Add(input[i, z]);
+                // result[index++] = input[i, z];
             }
         }
 
@@ -305,18 +315,23 @@ public class BoardManager : NetworkBehaviour
     [Command(requiresAuthority = false)]
     public void CmdPlayerPlayed()
     {
-        if (_playerTurn == 1)
-            _playerTurn = 2;
-        else
+        _playerTurn++;
+        if (_playerTurn > _networkSweeper.ConnectionAmount())
             _playerTurn = 1;
 
-        Debug.Log("Player played!");
+        Debug.Log($"Player played! It is now player {_playerTurn}'s turn!");
     }
 
-    public byte GetPlayerTurn() => _playerTurn;
+    #region Getters
+
     public bool GetMineStatus() => _minesGenerated;
     public bool GetGameStatus() => _gameOver;
+    public byte GetPlayerTurn() => _playerTurn;
+    public byte GetHeight() => _height;
+    public byte GetWidth() => _width;
 
     public Sprite GetSprite(TileSprites sprite) => _sprites[(int)sprite];
     public Sprite GetSprite(int sprite) => _sprites[sprite];
+
+    #endregion
 }

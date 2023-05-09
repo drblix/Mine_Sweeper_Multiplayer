@@ -22,6 +22,8 @@ public class Tile : NetworkBehaviour
     [ClientRpc]
     public void RpcReveal()
     {
+        if (_board == null) return;
+
         if (!_board.GetMineStatus())
         {
             _board.PlantMines(this);
@@ -66,7 +68,11 @@ public class Tile : NetworkBehaviour
     }
 
     [ClientRpc]
-    private void RpcSetColor(Color color) => _spriteRenderer.color = color;
+    private void RpcSetColor(Color color)
+    {
+        if (_spriteRenderer != null)
+            _spriteRenderer.color = color;
+    }
 
     #endregion
 
